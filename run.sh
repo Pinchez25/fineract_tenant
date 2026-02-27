@@ -4,7 +4,7 @@ set -euo pipefail
 
 echo "Example for Creating tenant: bank_a ..."
 
-python add_tenant.py \
+python main.py \
   --tenant-id my_tenant \
   --tenant-name "My Tenant" \
   --db-name bank_a \
