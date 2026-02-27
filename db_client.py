@@ -154,9 +154,7 @@ class DatabaseClient:
 
         return result.returncode, result.stdout, result.stderr
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+
 
     def execute(self, sql: str, target_db: str | None = None) -> bool:
         """Execute *sql* (no result needed). Returns True on success."""

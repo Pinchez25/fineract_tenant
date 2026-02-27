@@ -31,9 +31,6 @@ from constants import (
 )
 from tenant_manager import TenantManager
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,10 +39,6 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Secret resolution
-# ---------------------------------------------------------------------------
 
 def _resolve_secret(cli_value: str | None, env_var: str, prompt: str, *, allow_default: str | None = None) -> str:
     """
@@ -66,10 +59,6 @@ def _resolve_secret(cli_value: str | None, env_var: str, prompt: str, *, allow_d
         return allow_default
     raise SystemExit(f"ERROR: {env_var} is required but was not provided.")
 
-
-# ---------------------------------------------------------------------------
-# Argument parser
-# ---------------------------------------------------------------------------
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -135,11 +124,6 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="Print SQL without executing any changes")
 
     return parser
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 def main() -> None:
     parser = _build_parser()
