@@ -4,8 +4,8 @@ Thin database client that executes SQL via the CLI tools (mysql / psql).
 Design decisions:
   - Passwords are NEVER passed as CLI arguments; MySQL uses a temp option file
     (chmod 0600, deleted in a finally block) and PostgreSQL uses PGPASSWORD.
-  - A single private _run() method drives both execute() and query_scalar(),
-    eliminating the duplication present in the original code.
+  - Command construction is delegated to _build_mysql_cmd and _build_postgres_cmd,
+    keeping _run lean and free of duplication.
   - subprocess calls honour SUBPROCESS_TIMEOUT to prevent hung DB calls.
 """
 
@@ -66,64 +66,72 @@ class DatabaseClient:
         self.password = password
         self.dbname = dbname
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    def _build_cmd(self, sql: str, target_db: str | None, scalar: bool) -> tuple[list[str], dict]:
+    def _build_mysql_cmd(
+            self,
+            sql: str,
+            db: str | None,
+            scalar: bool,
+            cfg_path: str,
+    ) -> list[str]:
         """
-        Return (cmd, env) appropriate for the configured database type.
-
-        *scalar* adds flags that strip column headers / whitespace so the
-        caller can parse the first line directly.
+        Build the mysql CLI command. Password is supplied via *cfg_path*
+        (a temporary option file) rather than as an argument.
         """
-        db = target_db or self.dbname
-        env = os.environ.copy()
-
-        if self.db_type == "mysql":
-            # Password injected via option file, never via argv
-            # Caller is responsible for using _mysql_option_file context manager
-            raise NotImplementedError("Call _build_mysql_cmd instead")
-
-        # PostgreSQL
-        env["PGPASSWORD"] = self.password
         cmd = [
-            "psql",
-            "-h", self.host,
-            "-p", str(self.port),
-            "-U", self.username,
+            "mysql",
+            f"--defaults-extra-file={cfg_path}",
+            f"-h{self.host}",
+            f"-P{self.port}",
+            f"-u{self.username}",
         ]
+        if db:
+            cmd.append(db)
+        if scalar:
+            cmd += ["--skip-column-names", "--batch", "-e", sql]
+        else:
+            cmd += ["--execute", sql]
+        return cmd
+
+    def _build_postgres_cmd(
+            self,
+            sql: str,
+            db: str | None,
+            scalar: bool,
+    ) -> tuple[list[str], dict]:
+        """
+        Build the psql CLI command and a modified environment dict that
+        carries PGPASSWORD (never passed as an argument).
+        """
+        env = os.environ.copy()
+        env["PGPASSWORD"] = self.password
+
+        cmd = ["psql", "-h", self.host, "-p", str(self.port), "-U", self.username]
         if db:
             cmd += ["-d", db]
         if scalar:
             cmd += ["-t", "-A"]  # tuples-only, unaligned
         cmd += ["-c", sql]
+
         return cmd, env
 
-    def _run(self, sql: str, target_db: str | None, *, scalar: bool = False) -> tuple[int, str, str]:
+    def _run(
+            self,
+            sql: str,
+            target_db: str | None,
+            *,
+            scalar: bool = False,
+    ) -> tuple[int, str, str]:
         """
         Execute *sql* and return (returncode, stdout, stderr).
 
-        Handles credential injection for both MySQL and PostgreSQL.
+        The MySQL branch keeps subprocess.run inside the context manager so
+        the option file is guaranteed to exist for the lifetime of the process.
         """
         db = target_db or self.dbname
 
         if self.db_type == "mysql":
             with _mysql_option_file(self.password) as cfg_path:
-                cmd = [
-                    "mysql",
-                    f"--defaults-extra-file={cfg_path}",
-                    f"-h{self.host}",
-                    f"-P{self.port}",
-                    f"-u{self.username}",
-                ]
-                if db:
-                    cmd.append(db)
-                if scalar:
-                    cmd += ["--skip-column-names", "--batch"]
-                    cmd += ["-e", sql]
-                else:
-                    cmd += ["--execute", sql]
+                cmd = self._build_mysql_cmd(sql, db, scalar, cfg_path)
                 result = subprocess.run(
                     cmd,
                     capture_output=True,
@@ -131,19 +139,7 @@ class DatabaseClient:
                     timeout=SUBPROCESS_TIMEOUT,
                 )
         else:
-            env = os.environ.copy()
-            env["PGPASSWORD"] = self.password
-            cmd = [
-                "psql",
-                "-h", self.host,
-                "-p", str(self.port),
-                "-U", self.username,
-            ]
-            if db:
-                cmd += ["-d", db]
-            if scalar:
-                cmd += ["-t", "-A"]
-            cmd += ["-c", sql]
+            cmd, env = self._build_postgres_cmd(sql, db, scalar)
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -153,8 +149,6 @@ class DatabaseClient:
             )
 
         return result.returncode, result.stdout, result.stderr
-
-
 
     def execute(self, sql: str, target_db: str | None = None) -> bool:
         """Execute *sql* (no result needed). Returns True on success."""
