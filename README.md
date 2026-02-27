@@ -27,7 +27,7 @@ and the necessary metadata registration in the Fineract system database.
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/your-repo/fineract-tenant-manager.git
+   git clone https://github.com/Pinchez25/fineract_tenant.git
    cd fineract-tenant-manager
    ```
 
@@ -108,6 +108,6 @@ python main.py --help
 - **No Residual Secrets**: Secrets are only held in memory or temporary files that are cleaned up upon exit, even if an
   error occurs.
 
-## License
+## Licence
 
 This project is licensed under the Apache Licence 2.0 – see the `cli.py` header for details.
